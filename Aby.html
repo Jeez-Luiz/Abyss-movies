@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Abyss Streaming</title>
+
+<style>
+:root {
+  --bg: #0b0b0f;
+  --panel: #15151d;
+  --accent: #e50914;
+  --text: #ffffff;
+  --muted: #9a9a9a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  height: 100vh;
+}
+
+/* ===== SIDEBAR ===== */
+#sidebar {
+  width: 320px;
+  background: var(--panel);
+  border-right: 1px solid #222;
+  display: flex;
+  flex-direction: column;
+}
+
+#sidebar h2 {
+  margin: 0;
+  padding: 15px;
+  background: #0f0f14;
+  font-size: 18px;
+}
+
+#list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ===== ITEMS ===== */
+.item {
+  padding: 12px 15px;
+  border-bottom: 1px solid #222;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.item:hover {
+  background: #1f1f2b;
+  transform: translateX(4px);
+}
+
+.folder::before {
+  content: "📁 ";
+}
+
+.file::before {
+  content: "🎬 ";
+}
+
+/* ===== MAIN ===== */
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+#toolbar {
+  padding: 12px;
+  background: #0f0f14;
+  display: flex;
+  gap: 10px;
+}
+
+#toolbar input {
+  flex: 1;
+  padding: 10px;
+  background: #1a1a24;
+  border: none;
+  color: white;
+  border-radius: 4px;
+}
+
+#toolbar button {
+  padding: 10px 16px;
+  background: var(--accent);
+  border: none;
+  color: white;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+#toolbar button:hover {
+  opacity: 0.9;
+}
+
+/* ===== MODAL ===== */
+#modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+#modalContent {
+  background: black;
+  padding: 10px;
+  border-radius: 8px;
+  position: relative;
+  width: 80%;
+  max-width: 900px;
+}
+
+#modalContent iframe {
+  width: 100%;
+  height: 480px;
+  border-radius: 6px;
+}
+
+#closeBtn {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<!-- ===== SIDEBAR ===== -->
+<div id="sidebar">
+  <h2 id="path">Root</h2>
+  <div id="list">Loading...</div>
+</div>
+
+<!-- ===== MAIN ===== -->
+<div id="main">
+  <div id="toolbar">
+    <input id="search" placeholder="Search movies..." />
+    <button onclick="loadResources()">Search</button>
+  </div>
+</div>
+
+<!-- ===== MODAL ===== -->
+<div id="modal" onclick="closeModal(event)">
+  <div id="modalContent">
+    <button id="closeBtn" onclick="closeModal()">×</button>
+    <iframe id="playerFrame"
+      src=""
+      frameborder="0"
+      scrolling="0"
+      allowfullscreen>
+    </iframe>
+  </div>
+</div>
+
+<script>
+/* ===== CONFIG ===== */
+const API_BASE = "https://api.abyss.to";
+const API_KEY = "0a73b9c171f7ce3cf1d7ec47ec52275f";
+const CORS = "https://api.allorigins.win/raw?url=";
+
+/* ===== STATE ===== */
+let currentFolder = "";
+let pageToken = "";
+
+/* ===== HELPERS ===== */
+function apiUrl(endpoint, params = {}) {
+  params.key = API_KEY;
+  const query = new URLSearchParams(params).toString();
+  return CORS + encodeURIComponent(`${API_BASE}${endpoint}?${query}`);
+}
+
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("API Error");
+  return res.json();
+}
+
+/* ===== LOAD FILES ===== */
+async function loadResources() {
+  const q = document.getElementById("search").value;
+  document.getElementById("list").innerHTML = "Loading...";
+
+  const data = await fetchJSON(
+    apiUrl("/v1/resources", {
+      q,
+      folderId: currentFolder,
+      maxResults: 25
+    })
+  );
+
+  document.getElementById("path").textContent = data.name || "Root";
+  renderItems(data.items);
+}
+
+function renderItems(items) {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+
+  items.forEach(item => {
+    const div = document.createElement("div");
+    div.className = "item " + (item.isDir ? "folder" : "file");
+    div.textContent = item.name;
+
+    if (item.isDir) {
+      div.onclick = () => {
+        currentFolder = item.id;
+        loadResources();
+      };
+    } else {
+      div.onclick = () => openModal(item.id);
+    }
+
+    list.appendChild(div);
+  });
+}
+
+/* ===== MODAL PLAYER ===== */
+function openModal(id) {
+  const iframe = document.getElementById("playerFrame");
+  iframe.src = `https://short.icu/${id}`;
+  document.getElementById("modal").style.display = "flex";
+}
+
+function closeModal(e) {
+  if (!e || e.target.id === "modal" || e.target.id === "closeBtn") {
+    document.getElementById("modal").style.display = "none";
+    document.getElementById("playerFrame").src = "";
+  }
+}
+
+/* ===== INIT ===== */
+loadResources();
+</script>
+
+</body>
+</html>
